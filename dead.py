@@ -16,6 +16,7 @@ from typing import Pattern
 from typing import Sequence
 from typing import Set
 from typing import Union
+from typing import Iterator
 
 from identify.identify import tags_from_path
 
@@ -281,6 +282,18 @@ def parse_entry_points_setup_cfg(visitor: Visitor) -> None:
                     visitor.read(match[1], node)
 
 
+def parse_disabled_filelines_file(filename: str) -> Iterator[FileLine]:
+    for unclean_line in open(filename).read().splitlines():
+        if not unclean_line or unclean_line.startswith('//'):
+            continue
+        # assert that there's a comment explaining the disable
+        # i need a regex that matches one or more digits, followed by a space and then two forward slashes
+        m = re.match(r'^(?P<fileline>.*\d+)\s+//(?P<comment>.+)$', unclean_line)
+        if not m:
+            raise ValueError(f'Invalid line: {unclean_line}')
+        yield FileLine(m.group('fileline'))
+
+                    
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -313,10 +326,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     visitor = Visitor()
     if args.disable_filelines:
-        visitor.disabled = set(
-            (fl for fl in open(args.disable_filelines).read().splitlines()
-             if fl and not fl.startswith('#'))
-        )
+        visitor.disabled.update(parse_disabled_filelines_file(args.disable_filelines))
 
     parse_entry_points_setup_py(visitor)
     parse_entry_points_setup_cfg(visitor)
